@@ -35,7 +35,7 @@ Top right corner → click Fork
 
 ### 2. Add AWS credentials
 In your repo:  
-Go to **Settings → Secrets and variables → Actions**  
+Go to **Settings → Secrets and variables → Actions New Repository Secret**  
 Add these two secrets:
 
 - `AWS_ACCESS_KEY_ID`

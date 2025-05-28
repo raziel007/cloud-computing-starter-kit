@@ -1,29 +1,79 @@
-name: Terraform Deploy
+name: Terraform Deploy S3 Bucket
 
+# Controls when the workflow will run
 on:
   push:
     branches:
-      - main
+      - main # Triggers the workflow on push events to the main branch
 
 jobs:
   terraform:
     name: 'Terraform Apply'
     runs-on: ubuntu-latest
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    # Adjust permissions as necessary if you are using a different authentication method.
+    permissions:
+      id-token: write # Required for federated OIDC role assumption
+      contents: read  # Required to checkout the repository
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4 # Updated to v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4 # Using v4
+      with:
+        # It's recommended to use OIDC for authentication if your cloud provider supports it.
+        # Replace with your AWS IAM Role ARN that the GitHub Actions runner will assume.
+        # Ensure this role has permissions to create S3 buckets and any other resources in your main.tf.
+        role-to-assume: arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_GITHUB_ACTIONS_ROLE_NAME
+        aws-region: us-east-1 # Must match the region in your main.tf or your intended deployment region
+        # Alternatively, for static credentials (less secure, use GitHub Secrets):
+        # aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        # aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # if using temporary credentials
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      uses: hashicorp/setup-terraform@v3 # Updated to v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.5.0 # You can change this to your desired Terraform version
 
-    - name: Initialize Terraform
+    - name: Terraform Init
+      id: init
       run: terraform init
+      # For production, you should configure a remote backend (e.g., S3) for your Terraform state.
+      # Example for S3 backend (add to your main.tf or a backend.tf file):
+      # terraform {
+      #   backend "s3" {
+      #     bucket         = "your-terraform-state-bucket-name"
+      #     key            = "path/to/your/statefile.tfstate"
+      #     region         = "us-east-1"
+      #     encrypt        = true
+      #     # dynamodb_table = "your-terraform-locks-table" # Optional, for state locking
+      #   }
+      # }
+
+    - name: Terraform Validate
+      id: validate
+      run: terraform validate
 
     - name: Terraform Plan
+      id: plan
       run: terraform plan -out=tfplan
+      # The -out=tfplan saves the plan to a file.
+      # This plan file is then used in the apply step to ensure that what was planned is what gets applied.
 
     - name: Terraform Apply
+      id: apply
       run: terraform apply -auto-approve tfplan
+      # The -auto-approve flag is used here because this is an automated CI/CD pipeline.
+      # In a more complex setup, you might want a manual approval step before applying.
+
+    # Optional: Add a step to output bucket name if needed for subsequent steps
+    # - name: Get Bucket Name Output
+    #   id: get_bucket_name
+    #   run: echo "bucket_name=$(terraform output -raw bucket_name)" >> $GITHUB_OUTPUT
+    #   # Assumes you have an output "bucket_name" in your main.tf
+
+    # - name: Use Bucket Name
+    #   run: echo "The S3 bucket created is ${{ steps.get_bucket_name.outputs.bucket_name }}"
